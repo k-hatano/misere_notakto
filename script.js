@@ -1,10 +1,11 @@
 
-var gBoardsCount = 1;
-var gBoard = new Array(0);
-var gBoardStatus = new Array(0);
-var gPlaying = 1;
-var gMoves = new Array(0);
-var gAI = 0;
+let gBoardsCount = 1;
+let gBoard = new Array(0);
+let gBoardStatus = new Array(0);
+let gPlaying = 1;
+let gMoves = new Array(0);
+let gAI = 0;
+let gMessage = "";
 
 onload = _ => {
   initialize();
@@ -26,20 +27,21 @@ function initBoard() {
   gPlaying = 1;
   gBoard = new Array(gBoardsCount * 9);
   gBoardStatus = new Array(gBoardsCount * 9);
-  for (var i = 0; i < gBoard.length; i++) {
+  for (let i = 0; i < gBoard.length; i++) {
     gBoard[i] = 0;
     gBoardStatus[i] = 0;
   }
   gMoves = new Array(0);
+  gMessage = "";
 }
 
 function undoClicked() {
-  var originalMoves = gMoves.concat();
+  let originalMoves = gMoves.concat();
   initBoard();
-  for (var i = 0; i < originalMoves.length - 1; i++) {
-    var x = originalMoves[i] % 3;
-    var y = Math.floor((originalMoves[i] % 9) / 3);
-    var boardIndex = Math.floor(originalMoves[i] / 9);
+  for (let i = 0; i < originalMoves.length - 1; i++) {
+    let x = originalMoves[i] % 3;
+    let y = Math.floor((originalMoves[i] % 9) / 3);
+    let boardIndex = Math.floor(originalMoves[i] / 9);
     playAt(boardIndex, x, y);
   }
   drawCanvas();
@@ -72,21 +74,22 @@ function aiChanged() {
 }
 
 function drawCanvas() {
-  var canvas = document.getElementById('canvas');
-  var width = canvas.clientWidth;
-  var height = canvas.clientHeight;
+  let canvas = document.getElementById('canvas');
+  let width = canvas.clientWidth;
+  let height = canvas.clientHeight;
+  let unit;
   canvas.width = width;
   canvas.height = height;
-  var ctx = canvas.getContext('2d');
+  let ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, width, height);
 
   ctx.lineWidth = 2;
   ctx.strokeStyle = "#808080";
-  for (var i = 0; i < gBoardsCount; i++) {
-    for (var y = 0; y < 3; y++) {
-      for (var x = 0; x < 3; x++) {
-        var rect = getRectOfBoardSquare(i, x, y);
-        var unit = rect[2];
+  for (let i = 0; i < gBoardsCount; i++) {
+    for (let y = 0; y < 3; y++) {
+      for (let x = 0; x < 3; x++) {
+        let rect = getRectOfBoardSquare(i, x, y, gBoardsCount);
+        unit = rect[2];
         switch (gBoardStatus[i * 9 + y * 3 + x]) {
         case -1:
           ctx.fillStyle = "#CCCCCC";
@@ -132,15 +135,23 @@ function drawCanvas() {
       }
     }
   }
+
+  let rect = getRectOfBoardSquare(gBoardsCount - 1, 2, 2, gBoardsCount);
+  if (gMessage && gMessage.length > 0) {
+    ctx.fillStyle = "#000000";
+    ctx.font = "" + (unit * 2 / 7) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(gMessage, (width / 2), rect[1] + rect[3] + unit * 4 / 7);
+  }
 }
 
 function canvasClicked() {
-  var point = [event.clientX, event.clientY];
+  let point = [event.clientX, event.clientY];
 
-  for (var i = 0; i < gBoardsCount; i++) {
-    for (var y = 0; y < 3; y++) {
-      for (var x = 0; x < 3; x++) {
-        var rect = getRectOfBoardSquare(i, x, y);
+  for (let i = 0; i < gBoardsCount; i++) {
+    for (let y = 0; y < 3; y++) {
+      for (let x = 0; x < 3; x++) {
+        let rect = getRectOfBoardSquare(i, x, y, gBoardsCount);
         if (rectContainsPoint(rect, point)) {
           playAt(i, x, y);
         }
@@ -154,38 +165,162 @@ function playAI() {
   if (isPlayableToAnywhere() == false) {
     return false;
   }
-  var played = false;
-  do {
-    var x = Math.floor(Math.random() * 3);
-    var y = Math.floor(Math.random() * 3);
-    var boardIndex = Math.floor(Math.random() * gBoardsCount);
-    if (isPlayable(boardIndex, x, y)) {
-      played = true;
-      playAt(boardIndex, x, y);
+  let maxScore = undefined;
+  let maxScoreIndices = new Array();
+  for (let i = 0; i < gBoard.length; i++) {
+    let tmpBoard = gBoard.concat();
+    let tmpBoardStatus = gBoardStatus.concat();
+
+    let boardIndex = Math.floor(i / 9);
+    let x = i % 3;
+    let y = Math.floor(i / 3) % 3;
+    let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 3);
+    if (maxScore == undefined || maxScore < score) {
+      maxScore = score;
+      maxScoreIndices = new Array();
+      maxScoreIndices.push(i);
+    } else if (maxScore == score) {
+      maxScoreIndices.push(i);
     }
-  } while (played == false);
+  }
+  if (maxScoreIndices != undefined && maxScoreIndices.length > 0) {
+    let maxScoreIndex = maxScoreIndices[Math.floor(Math.random() * maxScoreIndices.length)];
+
+    let boardIndex = Math.floor(maxScoreIndex / 9);
+    let x = maxScoreIndex % 3;
+    let y = Math.floor(maxScoreIndex / 3) % 3;
+    playAt(boardIndex, x, y);
+  }
+
   drawCanvas();
   return true;
+}
+
+function checkChiralities(boardsCount, board, boardChiralities) {
+  boardChiralities = new Array(board.length);
+  for (let i = 0; i < board.length; i++) {
+    boardChiralities[i] = new Array();
+  }
+
+  for (let i = 0; i < boardsCount; i++) {
+    if (board[i * 9 + 0] == board[i * 9 + 2]
+          && board[i * 9 + 3] == board[i * 9 + 5]
+          && board[i * 9 + 6] == board[i * 9 + 8]) {
+      boardChiralities[i * 9 + 2].push(i * 9 + 0);
+      boardChiralities[i * 9 + 5].push(i * 9 + 3);
+      boardChiralities[i * 9 + 8].push(i * 9 + 6);
+    }
+
+    if (board[i * 9 + 0] == board[i * 9 + 6]
+          && board[i * 9 + 1] == board[i * 9 + 7]
+          && board[i * 9 + 2] == board[i * 9 + 8]) {
+      boardChiralities[i * 9 + 6].push(i * 9 + 0);
+      boardChiralities[i * 9 + 7].push(i * 9 + 1);
+      boardChiralities[i * 9 + 8].push(i * 9 + 2);
+    }
+
+    if (board[i * 9 + 0] == board[i * 9 + 8]
+          && board[i * 9 + 1] == board[i * 9 + 7]
+          && board[i * 9 + 2] == board[i * 9 + 6]
+          && board[i * 9 + 3] == board[i * 9 + 5]) {
+      boardChiralities[i * 9 + 8].push(i * 9 + 0);
+      boardChiralities[i * 9 + 7].push(i * 9 + 1);
+      boardChiralities[i * 9 + 6].push(i * 9 + 2);
+      boardChiralities[i * 9 + 5].push(i * 9 + 3);
+    }
+  }
+
+  for (let i = 1; i < boardsCount; i++) {
+    for (let j = 0; j < i; j++) {
+      let same = true;
+      for (let k = 0; k < 9; k++) {
+        if (board[i * 9 + k] != board[j * 9 + k]) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        for (let k = 0; k < 9; k++) {
+          boardChiralities[i * 9 + k].push(j * 9 + k);
+        }
+      }
+    }
+  }
+
+  return boardChiralities;
+}
+
+function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus, depth = 1) {
+  if (!isPlayable(boardIndex, x, y, boardsCount, board, boardsStatus)) {
+    return undefined;
+  }
+  board[boardIndex * 9 + y * 3 + x] = playing;
+  checkBoard(boardsCount, board, boardsStatus);
+  let playable = isPlayableToAnywhere(boardsCount, board, boardsStatus);
+  if (playable == false) {
+    return -100;
+  } else {
+    if (depth <= 0) {
+      return 0;
+    }
+    let minScore = undefined;
+    let maxScore = undefined;
+    let boardChiralities = new Array(board.length);
+    boardChiralities = checkChiralities(boardsCount, board, boardChiralities);
+    for (let j = 0; j < board.length; j++) {
+      if (boardChiralities[j] && boardChiralities[j].length > 0) {
+        continue;
+      }
+      let tmpBoard2 = board.concat();
+      let tmpBoardsStatus2 = boardsStatus.concat();
+      let boardIndex2 = Math.floor(j / 9);
+      let x2 = j % 3;
+      let y2 = Math.floor(j / 3) % 3;
+      if (!isPlayable(boardIndex2, x2, y2, boardsCount, tmpBoard2, tmpBoardsStatus2)) {
+        continue;
+      }
+      let score2 = valuateMove(boardIndex2, x2, y2, 3 - playing, boardsCount, tmpBoard2, tmpBoardsStatus2, depth - 1);
+      if (maxScore == undefined || maxScore < score2) {
+        maxScore = score2;
+      }
+      if (maxScore >= 100) {
+        break;
+      }
+    }
+    return maxScore / (-2);
+  }
+  return 0;
 }
 
 function playAt(boardIndex, x, y) {
   if (isPlayable(boardIndex, x, y)) {
     gBoard[boardIndex * 9 + y * 3 + x] = gPlaying;
-    checkBoard();
-    gPlaying = 3 - gPlaying;
     gMoves.push(boardIndex * 9 + y * 3 + x);
-    if (gPlaying == gAI) {
-      playAI();
+    checkBoard(gBoardsCount, gBoard, gBoardStatus);
+    drawCanvas();
+    let playable = isPlayableToAnywhere();
+    if (playable) {
+      gPlaying = 3 - gPlaying;
+      if (gPlaying == gAI) {
+        playAI()
+      }
+    } else {
+      gPlaying = gPlaying - 3;
+      if (gPlaying == -1) {
+        gMessage = "First player wins!";
+      } else if (gPlaying == -2) {
+        gMessage = "Second player wins!";
+      }
     }
   }
 }
 
-function isPlayableToAnywhere() {
-  var playable = false;
-  for (var i = 0; i < gBoardsCount; i++) {
-    for (var y = 0; y < 3; y++) {
-      for (var x = 0; x < 3; x++) {
-        if (isPlayable(i, x, y)) {
+function isPlayableToAnywhere(boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardStatus) {
+  let playable = false;
+  for (let i = 0; i < boardsCount; i++) {
+    for (let y = 0; y < 3; y++) {
+      for (let x = 0; x < 3; x++) {
+        if (isPlayable(i, x, y, boardsCount, board, boardsStatus)) {
           return true;
         }
       }
@@ -194,85 +329,85 @@ function isPlayableToAnywhere() {
   return false;
 }
 
-function isPlayable(boardIndex, x, y) {
-  if (gBoard[boardIndex * 9 + y * 3 + x] <= 0 && gBoardStatus[boardIndex * 9 + y * 3 + x] == 0) {
+function isPlayable(boardIndex, x, y, boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardStatus) {
+  if (board[boardIndex * 9 + y * 3 + x] <= 0 && boardsStatus[boardIndex * 9 + y * 3 + x] == 0) {
     return true;
   }
   return false;
 }
 
-function checkBoard() {
-  for (var i = 0; i < gBoardsCount; i++) {
-    var playable = true;
-    for (var y = 0; y < 3; y++) {
-      if (gBoard[i * 9 + y * 3 + 0] > 0 && gBoard[i * 9 + y * 3 + 1] > 0 && gBoard[i * 9 + y * 3 + 2] > 0) {
+function checkBoard(boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardStatus) {
+  for (let i = 0; i < gBoardsCount; i++) {
+    let playable = true;
+    for (let y = 0; y < 3; y++) {
+      if (board[i * 9 + y * 3 + 0] > 0 && board[i * 9 + y * 3 + 1] > 0 && board[i * 9 + y * 3 + 2] > 0) {
         playable = false;
       }
     }
-    for (var x = 0; x < 3; x++) {
-      if (gBoard[i * 9 + x] > 0 && gBoard[i * 9 + 3 + x] > 0 && gBoard[i * 9 + 6 + x] > 0) {
+    for (let x = 0; x < 3; x++) {
+      if (board[i * 9 + x] > 0 && board[i * 9 + 3 + x] > 0 && board[i * 9 + 6 + x] > 0) {
         playable = false;
       }
     }
-    if (gBoard[i * 9] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 8] > 0) {
+    if (board[i * 9] > 0 && board[i * 9 + 4] > 0 && board[i * 9 + 8] > 0) {
       playable = false;
     }
-    if (gBoard[i * 9 + 2] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 6] > 0) {
+    if (board[i * 9 + 2] > 0 && board[i * 9 + 4] > 0 && board[i * 9 + 6] > 0) {
       playable = false;
     }
 
     if (playable == false) {
-      for (var j = 0; j < 9; j++) {
-        gBoardStatus[i * 9 + j] = -1;
-        if (gBoard[i * 9 + j] < 0) {
-          gBoard[i * 9 + j] = 0;
+      for (let j = 0; j < 9; j++) {
+        boardsStatus[i * 9 + j] = -1;
+        if (board[i * 9 + j] < 0) {
+          board[i * 9 + j] = 0;
         }
       }
     }
   }
 
 
-  for (var i = 0; i < gBoardsCount; i++) {
-    if (gBoardStatus[i * 9] == 0) {
-      for (var y = 0; y < 3; y++) {
-        if (gBoard[i * 9 + y * 3 + 0] <= 0 && gBoard[i * 9 + y * 3 + 1] > 0 && gBoard[i * 9 + y * 3 + 2] > 0) {
-          gBoard[i * 9 + y * 3 + 0] = -1;
+  for (let i = 0; i < boardsCount; i++) {
+    if (boardsStatus[i * 9] == 0) {
+      for (let y = 0; y < 3; y++) {
+        if (board[i * 9 + y * 3 + 0] <= 0 && board[i * 9 + y * 3 + 1] > 0 && board[i * 9 + y * 3 + 2] > 0) {
+          board[i * 9 + y * 3 + 0] = -1;
         }
-        if (gBoard[i * 9 + y * 3 + 0] > 0 && gBoard[i * 9 + y * 3 + 1] <= 0 && gBoard[i * 9 + y * 3 + 2] > 0) {
-          gBoard[i * 9 + y * 3 + 1] = -1;
+        if (board[i * 9 + y * 3 + 0] > 0 && board[i * 9 + y * 3 + 1] <= 0 && board[i * 9 + y * 3 + 2] > 0) {
+          board[i * 9 + y * 3 + 1] = -1;
         }
-        if (gBoard[i * 9 + y * 3 + 0] > 0 && gBoard[i * 9 + y * 3 + 1] > 0 && gBoard[i * 9 + y * 3 + 2] <= 0) {
-          gBoard[i * 9 + y * 3 + 2] = -1;
-        }
-      }
-      for (var x = 0; x < 3; x++) {
-        if (gBoard[i * 9 + x] <= 0 && gBoard[i * 9 + 3 + x] > 0 && gBoard[i * 9 + 6 + x] > 0) {
-          gBoard[i * 9 + x] = -1;
-        }
-        if (gBoard[i * 9 + x] > 0 && gBoard[i * 9 + 3 + x] <= 0 && gBoard[i * 9 + 6 + x] > 0) {
-          gBoard[i * 9 + 3 + x] = -1;
-        }
-        if (gBoard[i * 9 + x] > 0 && gBoard[i * 9 + 3 + x] > 0 && gBoard[i * 9 + 6 + x] <= 0) {
-          gBoard[i * 9 + 6 + x] = -1;
+        if (board[i * 9 + y * 3 + 0] > 0 && board[i * 9 + y * 3 + 1] > 0 && board[i * 9 + y * 3 + 2] <= 0) {
+          board[i * 9 + y * 3 + 2] = -1;
         }
       }
-      if (gBoard[i * 9] <= 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 8] > 0) {
-        gBoard[i * 9] = -1;
+      for (let x = 0; x < 3; x++) {
+        if (board[i * 9 + x] <= 0 && board[i * 9 + 3 + x] > 0 && board[i * 9 + 6 + x] > 0) {
+          board[i * 9 + x] = -1;
+        }
+        if (board[i * 9 + x] > 0 && board[i * 9 + 3 + x] <= 0 && board[i * 9 + 6 + x] > 0) {
+          board[i * 9 + 3 + x] = -1;
+        }
+        if (board[i * 9 + x] > 0 && board[i * 9 + 3 + x] > 0 && board[i * 9 + 6 + x] <= 0) {
+          board[i * 9 + 6 + x] = -1;
+        }
       }
-      if (gBoard[i * 9] > 0 && gBoard[i * 9 + 4] <= 0 && gBoard[i * 9 + 8] > 0) {
-        gBoard[i * 9 + 4] = -1;
+      if (board[i * 9] <= 0 && board[i * 9 + 4] > 0 && board[i * 9 + 8] > 0) {
+        board[i * 9] = -1;
       }
-      if (gBoard[i * 9] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 8] <= 0) {
-        gBoard[i * 9 + 8] = -1;
+      if (board[i * 9] > 0 && board[i * 9 + 4] <= 0 && board[i * 9 + 8] > 0) {
+        board[i * 9 + 4] = -1;
       }
-      if (gBoard[i * 9 + 2] <= 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 6] > 0) {
-        gBoard[i * 9 + 2] = -1;
+      if (board[i * 9] > 0 && board[i * 9 + 4] > 0 && board[i * 9 + 8] <= 0) {
+        board[i * 9 + 8] = -1;
       }
-      if (gBoard[i * 9 + 2] > 0 && gBoard[i * 9 + 4] <= 0 && gBoard[i * 9 + 6] > 0) {
-        gBoard[i * 9 + 4] = -1;
+      if (board[i * 9 + 2] <= 0 && board[i * 9 + 4] > 0 && board[i * 9 + 6] > 0) {
+        board[i * 9 + 2] = -1;
       }
-      if (gBoard[i * 9 + 2] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 6] <= 0) {
-        gBoard[i * 9 + 6] = -1;
+      if (board[i * 9 + 2] > 0 && board[i * 9 + 4] <= 0 && board[i * 9 + 6] > 0) {
+        board[i * 9 + 4] = -1;
+      }
+      if (board[i * 9 + 2] > 0 && board[i * 9 + 4] > 0 && board[i * 9 + 6] <= 0) {
+        board[i * 9 + 6] = -1;
       }
     }
   }
@@ -282,49 +417,65 @@ function windowResized() {
   drawCanvas();
 }
 
-function getRectOfBoardSquare(boardIndex, x, y) {
-  var canvas = document.getElementById('canvas');
-  var width = canvas.clientWidth;
-  var height = canvas.clientHeight;
-  var unit, xCenter, yCenter, xMax, yMax, xBoardOffset, yBoardOffset;
-  if (width > height) {
-    unit = height;
-    xCenter = width / 2 - height / 2;
-    yCenter = 0;
-  } else {
-    unit = width;
-    xCenter = 0;
-    yCenter = height / 2 - width / 2;
-  }
+function getRectOfBoardSquare(boardIndex, x, y, boardsCount) {
+  let canvas = document.getElementById('canvas');
+  let width = canvas.clientWidth;
+  let height = canvas.clientHeight;
+  let unit, xMax, yMax, xBoardOffset, yBoardOffset, xOrigin, yOrigin;
 
-  if (gBoardsCount == 1) {
+  if (boardsCount == 1) {
     xMax = 5;
     yMax = 5;
     xBoardOffset = 0;
     yBoardOffset = 0;
-  } else if (gBoardsCount == 2) {
-    xMax = 9;
-    yMax = 9;
+  } else if (boardsCount == 2) {
     if (width > height) {
+      xMax = 9;
+      yMax = 5;
       xBoardOffset = boardIndex % 2 * 4;
-      yBoardOffset = 2;
+      yBoardOffset = 0;
     } else {
-      xBoardOffset = 2;
+      xMax = 5;
+      yMax = 9;
+      xBoardOffset = 0;
       yBoardOffset = boardIndex % 2 * 4;
+    }
+  } else if (boardsCount == 5) {
+    if (width > height) {
+      xMax = 13;
+      yMax = 9;
+      xBoardOffset = boardIndex % 3 * 4;
+      yBoardOffset = Math.floor(boardIndex / 3) * 4;
+    } else {
+      xMax = 9;
+      yMax = 13;
+      xBoardOffset = boardIndex % 2 * 4;
+      yBoardOffset = Math.floor(boardIndex / 2) * 4;
     }
   } else {
     xMax = 9;
     yMax = 9;
-    xBoardOffset = Math.floor(boardIndex / 2) * 4;
-    yBoardOffset = boardIndex % 2 * 4;
+    xBoardOffset = boardIndex % 2 * 4;
+    yBoardOffset = Math.floor(boardIndex / 2) * 4;
+  }
+
+  if (width / xMax > height / yMax) {
+    unit = height / yMax;
+    xOrigin = (width / 2) - (height / yMax * (xMax / 2));
+    yOrigin = 0;
+  } else {
+    unit = width / xMax;
+    xOrigin = 0;
+    yOrigin = (height / 2) - (width / xMax * (yMax / 2));
   }
 
   return [
-    ((x + 1 + xBoardOffset) / xMax) * unit + xCenter,
-    ((y + 1 + yBoardOffset) / yMax) * unit + yCenter,
-    unit / xMax,
-    unit / yMax
+    (x + 1 + xBoardOffset) * unit + xOrigin,
+    (y + 1 + yBoardOffset) * unit + yOrigin,
+    unit,
+    unit
   ];
+
 }
 
 function rectContainsPoint(rect, point) {
