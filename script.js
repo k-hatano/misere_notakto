@@ -167,6 +167,8 @@ function playAI() {
   }
   let maxScore = undefined;
   let maxScoreIndices = new Array();
+  let garbageIndices = new Array();
+  let boardChiralities = checkChiralities(gBoardsCount, gBoard);
   for (let i = 0; i < gBoard.length; i++) {
     let tmpBoard = gBoard.concat();
     let tmpBoardStatus = gBoardStatus.concat();
@@ -174,17 +176,54 @@ function playAI() {
     let boardIndex = Math.floor(i / 9);
     let x = i % 3;
     let y = Math.floor(i / 3) % 3;
+    if (boardChiralities && boardChiralities[i].length > 0) {
+      let maxMatched = undefined;
+      let garbageMatched = undefined;
+      for (let c = 0; c < boardChiralities[i].length; c++) {
+        let boardChirality = boardChiralities[i];
+        if (boardChirality.indexOf(i) >= 0) {
+          for (let ci = 0; ci < boardChirality.length; ci++) {
+            if (maxScoreIndices.indexOf(boardChirality[ci])) {
+              maxMatched = boardChirality[ci];
+              break;
+            }
+            if (garbageIndices.indexOf(boardChirality[ci])) {
+              garbageMatched = boardChirality[ci];
+              break;
+            }
+          }
+          if (maxMatched != undefined || garbageMatched != undefined) {
+            break;
+          }
+        }
+      }
+      if (maxMatched != undefined) {
+        maxScoreIndices.push(maxMatched);
+        continue;
+      }
+      if (garbageMatched != undefined) {
+        continue;
+      }
+    }
     let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 3);
-    if (maxScore == undefined || maxScore < score) {
+    // console.log("i=" + i + " score=" + score);
+    if (maxScore == undefined) {
       maxScore = score;
+      maxScoreIndices = new Array();
+      maxScoreIndices.push(i);
+    } else if (maxScore < score) {
+      maxScore = score;
+      garbageIndices = garbageIndices.concat(maxScoreIndices);
       maxScoreIndices = new Array();
       maxScoreIndices.push(i);
     } else if (maxScore == score) {
       maxScoreIndices.push(i);
     }
   }
+    // console.log("maxScore=" + maxScore + " maxScoreIndices=" + maxScoreIndices);
   if (maxScoreIndices != undefined && maxScoreIndices.length > 0) {
     let maxScoreIndex = maxScoreIndices[Math.floor(Math.random() * maxScoreIndices.length)];
+    // console.log("maxScoreIndex=" + maxScoreIndex);
 
     let boardIndex = Math.floor(maxScoreIndex / 9);
     let x = maxScoreIndex % 3;
@@ -196,33 +235,49 @@ function playAI() {
   return true;
 }
 
-function checkChiralities(boardsCount, board, boardChiralities) {
-  boardChiralities = new Array(board.length);
+function checkChiralities(boardsCount, board) {
+  let boardChiralities = new Array(board.length);
   for (let i = 0; i < board.length; i++) {
     boardChiralities[i] = new Array();
   }
 
   for (let i = 0; i < boardsCount; i++) {
-    if (board[i * 9 + 0] == board[i * 9 + 2]
-          && board[i * 9 + 3] == board[i * 9 + 5]
-          && board[i * 9 + 6] == board[i * 9 + 8]) {
+    if ((board[i * 9 + 0] > 0) == (board[i * 9 + 2] > 0)
+          && (board[i * 9 + 3] > 0) == (board[i * 9 + 5] > 0)
+          && (board[i * 9 + 6] > 0) == (board[i * 9 + 8] > 0)) {
       boardChiralities[i * 9 + 2].push(i * 9 + 0);
       boardChiralities[i * 9 + 5].push(i * 9 + 3);
       boardChiralities[i * 9 + 8].push(i * 9 + 6);
     }
 
-    if (board[i * 9 + 0] == board[i * 9 + 6]
-          && board[i * 9 + 1] == board[i * 9 + 7]
-          && board[i * 9 + 2] == board[i * 9 + 8]) {
+    if ((board[i * 9 + 0] > 0) == (board[i * 9 + 6] > 0)
+          && (board[i * 9 + 1] > 0) == (board[i * 9 + 7] > 0)
+          && (board[i * 9 + 2] > 0) == (board[i * 9 + 8] > 0)) {
       boardChiralities[i * 9 + 6].push(i * 9 + 0);
       boardChiralities[i * 9 + 7].push(i * 9 + 1);
       boardChiralities[i * 9 + 8].push(i * 9 + 2);
     }
 
-    if (board[i * 9 + 0] == board[i * 9 + 8]
-          && board[i * 9 + 1] == board[i * 9 + 7]
-          && board[i * 9 + 2] == board[i * 9 + 6]
-          && board[i * 9 + 3] == board[i * 9 + 5]) {
+    if ((board[i * 9 + 1] > 0) == (board[i * 9 + 3] > 0)
+          && (board[i * 9 + 2] > 0) == (board[i * 9 + 6] > 0)
+          && (board[i * 9 + 5] > 0) == (board[i * 9 + 7] > 0)) {
+      boardChiralities[i * 9 + 3].push(i * 9 + 1);
+      boardChiralities[i * 9 + 6].push(i * 9 + 2);
+      boardChiralities[i * 9 + 7].push(i * 9 + 5);
+    }
+
+    if ((board[i * 9 + 0] > 0) == (board[i * 9 + 8] > 0)
+          && (board[i * 9 + 1] > 0) == (board[i * 9 + 5] > 0)
+          && (board[i * 9 + 3] > 0) == (board[i * 9 + 7] > 0)) {
+      boardChiralities[i * 9 + 8].push(i * 9 + 0);
+      boardChiralities[i * 9 + 5].push(i * 9 + 1);
+      boardChiralities[i * 9 + 7].push(i * 9 + 3);
+    }
+
+    if ((board[i * 9 + 0] > 0) == (board[i * 9 + 8] > 0)
+          && (board[i * 9 + 1] > 0) == (board[i * 9 + 7] > 0)
+          && (board[i * 9 + 2] > 0) == (board[i * 9 + 6] > 0)
+          && (board[i * 9 + 3] > 0) == (board[i * 9 + 5] > 0)) {
       boardChiralities[i * 9 + 8].push(i * 9 + 0);
       boardChiralities[i * 9 + 7].push(i * 9 + 1);
       boardChiralities[i * 9 + 6].push(i * 9 + 2);
@@ -234,7 +289,7 @@ function checkChiralities(boardsCount, board, boardChiralities) {
     for (let j = 0; j < i; j++) {
       let same = true;
       for (let k = 0; k < 9; k++) {
-        if (board[i * 9 + k] != board[j * 9 + k]) {
+        if ((board[i * 9 + k] > 0) != (board[j * 9 + k] > 0)) {
           same = false;
           break;
         }
@@ -265,8 +320,8 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
     }
     let minScore = undefined;
     let maxScore = undefined;
-    let boardChiralities = new Array(board.length);
-    boardChiralities = checkChiralities(boardsCount, board, boardChiralities);
+    let boardChiralities = checkChiralities(boardsCount, board);
+    // console.dir(boardChiralities);
     for (let j = 0; j < board.length; j++) {
       if (boardChiralities[j] && boardChiralities[j].length > 0) {
         continue;
@@ -307,9 +362,9 @@ function playAt(boardIndex, x, y) {
     } else {
       gPlaying = gPlaying - 3;
       if (gPlaying == -1) {
-        gMessage = "First player wins!";
+        gMessage = "First player" + (gAI == 1 ? " (AI) " : " ") + "wins!";
       } else if (gPlaying == -2) {
-        gMessage = "Second player wins!";
+        gMessage = "Second player" + (gAI == 2 ? " (AI) " : " ") + "wins!";
       }
     }
   }
