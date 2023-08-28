@@ -6,6 +6,8 @@ let gPlaying = 1;
 let gMoves = new Array(0);
 let gAI = 0;
 let gMessage = "";
+let gHintMode = false;
+let gBoardScore = undefined;
 
 onload = _ => {
   initialize();
@@ -27,9 +29,11 @@ function initBoard() {
   gPlaying = 1;
   gBoard = new Array(gBoardsCount * 9);
   gBoardStatus = new Array(gBoardsCount * 9);
+  gBoardScore = new Array(gBoardsCount * 9);
   for (let i = 0; i < gBoard.length; i++) {
     gBoard[i] = 0;
     gBoardStatus[i] = 0;
+    gBoardScore[i] = 0;
   }
   gMoves = new Array(0);
   gMessage = "";
@@ -49,6 +53,7 @@ function undoClicked() {
 
 function resetClicked() {
   initBoard();
+  gHintMode = event.altKey;
   drawCanvas();
   if (gPlaying == gAI) {
     playAI();
@@ -75,11 +80,10 @@ function aiChanged() {
 
 function drawCanvas() {
   let canvas = document.getElementById('canvas');
-  let width = canvas.clientWidth;
-  let height = canvas.clientHeight;
+  let settings = document.getElementById('settings');
+  let width = canvas.width;
+  let height = canvas.height;
   let unit;
-  canvas.width = width;
-  canvas.height = height;
   let ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, width, height);
 
@@ -88,7 +92,7 @@ function drawCanvas() {
   for (let i = 0; i < gBoardsCount; i++) {
     for (let y = 0; y < 3; y++) {
       for (let x = 0; x < 3; x++) {
-        let rect = getRectOfBoardSquare(i, x, y, gBoardsCount);
+        let rect = getRectOfBoardSquare(i, x, y, gBoardsCount, width, height);
         unit = rect[2];
         switch (gBoardStatus[i * 9 + y * 3 + x]) {
         case -1:
@@ -132,11 +136,20 @@ function drawCanvas() {
           ctx.ellipse(rect[0] + rect[2] / 2, rect[1] + rect[3] / 2, unit / 16, unit/16 , 0, 0, Math.PI * 2);
           ctx.fill();
         }
+        if (gHintMode == true && gBoardScore != undefined) {
+          let score = gBoardScore[i * 9 + y * 3 + x];
+          if (score != undefined) {
+            ctx.fillStyle = "#A8A8A8";
+            ctx.font = "" + (unit * 2 / 7) + "px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(score, rect[0] + rect[2] / 2, rect[1] + rect[3] * 8 / 13);
+          }
+        }
       }
     }
   }
 
-  let rect = getRectOfBoardSquare(gBoardsCount - 1, 2, 2, gBoardsCount);
+  let rect = getRectOfBoardSquare(gBoardsCount - 1, 2, 2, gBoardsCount, width, height);
   if (gMessage && gMessage.length > 0) {
     ctx.fillStyle = "#000000";
     ctx.font = "" + (unit * 2 / 7) + "px sans-serif";
@@ -146,12 +159,15 @@ function drawCanvas() {
 }
 
 function canvasClicked() {
-  let point = [event.clientX, event.clientY];
+  let canvas = document.getElementById('canvas');
+  let width = canvas.width;
+  let height = canvas.height;
+  let point = [event.offsetX, event.offsetY];
 
   for (let i = 0; i < gBoardsCount; i++) {
     for (let y = 0; y < 3; y++) {
       for (let x = 0; x < 3; x++) {
-        let rect = getRectOfBoardSquare(i, x, y, gBoardsCount);
+        let rect = getRectOfBoardSquare(i, x, y, gBoardsCount, width, height);
         if (rectContainsPoint(rect, point)) {
           playAt(i, x, y);
         }
@@ -159,6 +175,33 @@ function canvasClicked() {
     }
   }
   drawCanvas();
+}
+
+function updateScore() {
+  let boardChiralities = checkChiralities(gBoardsCount, gBoard);
+  for (let i = 0; i < gBoard.length; i++) {
+    gBoardScore[i] = undefined;
+  }
+  for (let i = 0; i < gBoard.length; i++) {
+    let tmpBoard = gBoard.concat();
+    let tmpBoardStatus = gBoardStatus.concat();
+    let boardIndex = Math.floor(i / 9);
+    let x = i % 3;
+    let y = Math.floor(i / 3) % 3;
+
+    if (boardChiralities && boardChiralities[i].length > 0) { 
+      for (let ci = 0; ci < boardChiralities[i].length; ci++) {
+        if (gBoardScore[boardChiralities[i][ci]] != undefined) {
+          gBoardScore[i] = gBoardScore[boardChiralities[i][ci]];
+          break;
+        }
+      }
+    }
+    if (gBoardScore[i] == undefined) {
+      let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 4);
+      gBoardScore[boardIndex * 9 + y * 3 + x] = score;
+    }
+  }
 }
 
 function playAI() {
@@ -357,7 +400,10 @@ function playAt(boardIndex, x, y) {
     if (playable) {
       gPlaying = 3 - gPlaying;
       if (gPlaying == gAI) {
-        playAI()
+        playAI();
+        if (gHintMode) {
+          updateScore();
+        }
       }
     } else {
       gPlaying = gPlaying - 3;
@@ -469,13 +515,15 @@ function checkBoard(boardsCount = gBoardsCount, board = gBoard, boardsStatus = g
 }
 
 function windowResized() {
-  drawCanvas();
-}
-
-function getRectOfBoardSquare(boardIndex, x, y, boardsCount) {
   let canvas = document.getElementById('canvas');
   let width = canvas.clientWidth;
   let height = canvas.clientHeight;
+  canvas.width = width;
+  canvas.height = height;
+  drawCanvas();
+}
+
+function getRectOfBoardSquare(boardIndex, x, y, boardsCount, width, height) {
   let unit, xMax, yMax, xBoardOffset, yBoardOffset, xOrigin, yOrigin;
 
   if (boardsCount == 1) {
@@ -494,6 +542,23 @@ function getRectOfBoardSquare(boardIndex, x, y, boardsCount) {
       yMax = 9;
       xBoardOffset = 0;
       yBoardOffset = boardIndex % 2 * 4;
+    }
+  } else if (boardsCount == 3) {
+    if (width >= height * 2.5) {
+      xMax = 13;
+      yMax = 5;
+      xBoardOffset = boardIndex % 3 * 4;
+      yBoardOffset = 0;
+    } else if (width * 2.5 <= height) {
+      xMax = 5;
+      yMax = 13;
+      xBoardOffset = 0;
+      yBoardOffset = boardIndex * 4;
+    } else {
+      xMax = 9;
+      yMax = 9;
+      xBoardOffset = boardIndex % 2 * 4;
+      yBoardOffset = Math.floor(boardIndex / 2) * 4;
     }
   } else if (boardsCount == 5) {
     if (width > height) {

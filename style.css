@@ -5,6 +5,7 @@ body {
 }
 
 div#main {
+	display: flex;
 	padding: 0;
 	margin: 0;
 	width: 100%;
@@ -12,21 +13,22 @@ div#main {
 	background: #FFFFFF;
 	user-select: none;
 	overscroll-behavior-y: none;
+	flex-direction: column;
 }
 
 canvas#canvas {
-	position: absolute;
 	width: 100%;
-	height: calc(100% - 54px);
+	height: 90vh;
 	top: 0px;
-	z-index: 0;
+	flex: 1;
+	flex-grow: 1;
 }
 
 div#settings {
-	position: fixed;
 	left: 0px;
 	bottom: 0px;
 	width: 100%;
+	min-height: 40px;
 	padding: 7px 0px;
 	text-align: center;
 	font-size: 14px;
