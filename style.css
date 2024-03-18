@@ -51,3 +51,7 @@ div#settings button:active {
 	background: #666e;
 	color: #fff;
 }
+
+.hidden {
+	visibility: hidden !important;
+}

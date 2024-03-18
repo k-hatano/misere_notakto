@@ -1,13 +1,17 @@
 
 let gBoardsCount = 1;
 let gBoard = new Array(0);
-let gBoardStatus = new Array(0);
+let gBoardsStatus = new Array(0);
 let gPlaying = 1;
 let gMoves = new Array(0);
 let gAI = 0;
 let gMessage = "";
 let gHintMode = false;
-let gBoardScore = undefined;
+let gBoardsScore = undefined;
+let gBoardsScoreCache = {};
+let gCursorX = -1;
+let gCursorY = -1;
+let gAIPlaying = false;
 
 onload = _ => {
   initialize();
@@ -23,20 +27,113 @@ function initialize() {
   document.getElementById('reset').addEventListener('click', resetClicked);
   document.getElementById('ai').addEventListener('change', aiChanged);
   document.getElementById('boards_count').addEventListener('change', boardsCountChanged);
+  document.addEventListener('keydown', keyPressed);
 }
 
 function initBoard() {
   gPlaying = 1;
   gBoard = new Array(gBoardsCount * 9);
-  gBoardStatus = new Array(gBoardsCount * 9);
-  gBoardScore = new Array(gBoardsCount * 9);
+  gBoardsStatus = new Array(gBoardsCount * 9);
+  gBoardsScore = new Array(gBoardsCount * 9);
   for (let i = 0; i < gBoard.length; i++) {
     gBoard[i] = 0;
-    gBoardStatus[i] = 0;
-    gBoardScore[i] = 0;
+    gBoardsStatus[i] = 0;
+    gBoardsScore[i] = 0;
   }
   gMoves = new Array(0);
+  gBoardsScoreCache = {}
   gMessage = "";
+  gCursorX = -1;
+  gCursorY = -1;
+  gAIPlaying = false;
+}
+
+function keyPressed() {
+  var keyCode = event.keyCode;
+  if (keyCode == 38 || keyCode == 67 || keyCode == 56 || keyCode == 104 || keyCode == 228) { // 上、C、8、ゲームパッド90
+    if (gPlaying <= 0) {
+      gCursorX = -1;
+      gCursorY = -1;
+    } else if (gCursorX < 0 || gCursorY < 0) {
+      gCursorX = 0;
+      gCursorY = 0;
+    } else if (gCursorY > 0) {
+      gCursorY--;
+    } else {
+      let canvas = document.getElementById('canvas');
+      let units = getBoardUnits(gBoardsCount, canvas.width, canvas.height);
+      if (gCursorX >= Math.floor((units.xMax - 1) / 4) * 3) {
+        gCursorX -= Math.floor((units.xMax - 1) / 4) * 3;
+        gCursorY = 2;
+      }
+    }
+    document.getElementById('settings').className = 'settings hidden';
+    drawCanvas();
+    return;
+  }
+  if (keyCode == 40 || keyCode == 68 || keyCode == 50 || keyCode == 98 || keyCode == 227) { // 下、D、2、ゲームパッド89
+    if (gPlaying <= 0) {
+      gCursorX = -1;
+      gCursorY = -1;
+    } else if (gCursorX < 0 || gCursorY < 0) {
+      gCursorX = 0;
+      gCursorY = 0;
+    } else if (gCursorY < 2) {
+      gCursorY++;
+    } else {
+      let canvas = document.getElementById('canvas');
+      let units = getBoardUnits(gBoardsCount, canvas.width, canvas.height);
+      if (gCursorX + Math.floor((units.xMax - 1) / 4) * 3 < 3 * gBoardsCount) {
+        gCursorX += Math.floor((units.xMax - 1) / 4) * 3;
+        gCursorY = 0;
+      }
+    }
+    document.getElementById('settings').className = 'settings hidden';
+    drawCanvas();
+    return;
+  }
+  if (keyCode == 37 || keyCode == 69 || keyCode == 100 || keyCode == 52) { // 左、E、4
+    if (gPlaying <= 0) {
+      gCursorX = -1;
+      gCursorY = -1;
+    } else if (gCursorX < 0 || gCursorY < 0) {
+      gCursorX = 0;
+      gCursorY = 0;
+    } else if (gCursorX > 0) {
+      gCursorX--;
+    }
+    document.getElementById('settings').className = 'settings hidden';
+    drawCanvas();
+    return;
+  }
+  if (keyCode == 39 || keyCode == 70 || keyCode == 102 || keyCode == 54) { // 右、F、6
+    if (gPlaying <= 0) {
+      gCursorX = -1;
+      gCursorY = -1;
+    } else if (gCursorX < 0 || gCursorY < 0) {
+      gCursorX = 0;
+      gCursorY = 0;
+    } else if (gCursorX < 3 * gBoardsCount - 1) {
+      gCursorX++;
+    }
+    document.getElementById('settings').className = 'settings hidden';
+    drawCanvas();
+    return;
+  }
+  if (keyCode == 53 || keyCode == 101 || keyCode == 71 || keyCode == 13) { // 5、G、Enter
+    playAt(Math.floor(gCursorX / 3), gCursorX % 3, gCursorY);
+    document.getElementById('settings').className = 'settings hidden';
+    drawCanvas();
+    return;
+  }
+  if (keyCode == 48 || keyCode == 96 || keyCode == 79 || keyCode == 27) { // 0、O、Esc
+    if (document.getElementById('settings').className.indexOf('hidden') >= 0) {
+      document.getElementById('settings').className = 'settings';
+    } else {
+      document.getElementById('settings').className = 'settings hidden';
+    }
+    return;
+  }
 }
 
 function undoClicked() {
@@ -56,7 +153,7 @@ function resetClicked() {
   gHintMode = event.altKey;
   drawCanvas();
   if (gPlaying == gAI) {
-    playAI();
+    playAIAsync();
   }
 }
 
@@ -65,7 +162,7 @@ function boardsCountChanged() {
   initBoard();
   drawCanvas();
   if (gPlaying == gAI) {
-    playAI();
+    playAIAsync();
   }
 }
 
@@ -74,7 +171,7 @@ function aiChanged() {
   initBoard();
   drawCanvas();
   if (gPlaying == gAI) {
-    playAI();
+    playAIAsync();
   }
 }
 
@@ -94,7 +191,7 @@ function drawCanvas() {
       for (let x = 0; x < 3; x++) {
         let rect = getRectOfBoardSquare(i, x, y, gBoardsCount, width, height);
         unit = rect[2];
-        switch (gBoardStatus[i * 9 + y * 3 + x]) {
+        switch (gBoardsStatus[i * 9 + y * 3 + x]) {
         case -1:
           ctx.fillStyle = "#CCCCCC";
           ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
@@ -136,8 +233,8 @@ function drawCanvas() {
           ctx.ellipse(rect[0] + rect[2] / 2, rect[1] + rect[3] / 2, unit / 16, unit/16 , 0, 0, Math.PI * 2);
           ctx.fill();
         }
-        if (gHintMode == true && gBoardScore != undefined) {
-          let score = gBoardScore[i * 9 + y * 3 + x];
+        if (gHintMode == true && gBoardsScore != undefined) {
+          let score = gBoardsScore[i * 9 + y * 3 + x];
           if (score != undefined) {
             ctx.fillStyle = "#A8A8A8";
             ctx.font = "" + (unit * 2 / 7) + "px sans-serif";
@@ -156,6 +253,32 @@ function drawCanvas() {
     ctx.textAlign = "center";
     ctx.fillText(gMessage, (width / 2), rect[1] + rect[3] + unit * 4 / 7);
   }
+
+  if (gCursorX >= 0 && gCursorY >= 0) {
+    let rect = getRectOfBoardSquare(Math.floor(gCursorX / 3), gCursorX % 3, gCursorY, gBoardsCount, width, height);
+    rect = shrinkRect(rect, unit / 24);
+    ctx.lineWidth = unit / 24;
+    ctx.strokeStyle = "#000000";
+    let playing = gPlaying;
+    if (!isPlayable(Math.floor(gCursorX / 3), gCursorX % 3, gCursorY)) {
+      playing = 0;
+    }
+    switch (playing) {
+    case 1:
+      ctx.strokeStyle = "#FF0000";
+      break;
+    case 2:
+      ctx.strokeStyle = "#0000FF";
+      break;
+    default:
+      ctx.strokeStyle = "#404040";
+      break;
+    }
+
+    ctx.beginPath();
+    ctx.rect(rect[0], rect[1], rect[2], rect[3]);
+    ctx.stroke();
+  }
 }
 
 function canvasClicked() {
@@ -163,7 +286,13 @@ function canvasClicked() {
   let width = canvas.width;
   let height = canvas.height;
   let point = [event.offsetX, event.offsetY];
+  if (gPlaying == gAI || gAIPlaying == true) {
+    return;
+  }
 
+  gCursorX = -1;
+  gCursorY = -1;
+  document.getElementById('settings').className = 'settings';
   for (let i = 0; i < gBoardsCount; i++) {
     for (let y = 0; y < 3; y++) {
       for (let x = 0; x < 3; x++) {
@@ -178,60 +307,91 @@ function canvasClicked() {
 }
 
 function updateScore() {
-  let boardChiralities = checkChiralities(gBoardsCount, gBoard);
+  let boardAliases = checkAliases(gBoardsCount, gBoard);
   for (let i = 0; i < gBoard.length; i++) {
-    gBoardScore[i] = undefined;
+    gBoardsScore[i] = undefined;
   }
   for (let i = 0; i < gBoard.length; i++) {
     let tmpBoard = gBoard.concat();
-    let tmpBoardStatus = gBoardStatus.concat();
+    let tmpBoardStatus = gBoardsStatus.concat();
     let boardIndex = Math.floor(i / 9);
     let x = i % 3;
     let y = Math.floor(i / 3) % 3;
 
-    if (boardChiralities && boardChiralities[i].length > 0) { 
-      for (let ci = 0; ci < boardChiralities[i].length; ci++) {
-        if (gBoardScore[boardChiralities[i][ci]] != undefined) {
-          gBoardScore[i] = gBoardScore[boardChiralities[i][ci]];
+    if (boardAliases && boardAliases[i].length > 0) { 
+      for (let ci = 0; ci < boardAliases[i].length; ci++) {
+        if (gBoardsScore[boardAliases[i][ci]] != undefined) {
+          gBoardsScore[i] = gBoardsScore[boardAliases[i][ci]];
           break;
         }
       }
     }
-    if (gBoardScore[i] == undefined) {
+    if (gBoardsScore[i] == undefined) {
       let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 4);
-      gBoardScore[boardIndex * 9 + y * 3 + x] = score;
+      gBoardsScore[boardIndex * 9 + y * 3 + x] = score;
     }
   }
+}
+
+function getBinaryIndex(board) {
+  let result = 0;
+  let digit = 1;
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] > 0) {
+      result += digit;
+    }
+    digit *= 2;
+  }
+  return result;
+}
+
+function playAIAsync() {
+  gAIPlaying = true;
+  gMessage = "AI is thinking...";
+  drawCanvas();
+  requestAnimationFrame(_ => {
+    setTimeout(_ => {
+      playAI();
+      if (gHintMode) {
+        updateScore();
+      }
+      drawCanvas();
+      gAIPlaying = false;
+    }, 0);
+  });
 }
 
 function playAI() {
   if (isPlayableToAnywhere() == false) {
     return false;
   }
+  gMessage = "AI is thinking...";
+  drawCanvas();
+
   let maxScore = undefined;
   let maxScoreIndices = new Array();
   let garbageIndices = new Array();
-  let boardChiralities = checkChiralities(gBoardsCount, gBoard);
+  let boardAliases = checkAliases(gBoardsCount, gBoard);
   for (let i = 0; i < gBoard.length; i++) {
     let tmpBoard = gBoard.concat();
-    let tmpBoardStatus = gBoardStatus.concat();
+    let tmpBoardStatus = gBoardsStatus.concat();
 
     let boardIndex = Math.floor(i / 9);
     let x = i % 3;
     let y = Math.floor(i / 3) % 3;
-    if (boardChiralities && boardChiralities[i].length > 0) {
+    if (boardAliases && boardAliases[i].length > 0) {
       let maxMatched = undefined;
       let garbageMatched = undefined;
-      for (let c = 0; c < boardChiralities[i].length; c++) {
-        let boardChirality = boardChiralities[i];
-        if (boardChirality.indexOf(i) >= 0) {
-          for (let ci = 0; ci < boardChirality.length; ci++) {
-            if (maxScoreIndices.indexOf(boardChirality[ci])) {
-              maxMatched = boardChirality[ci];
+      for (let c = 0; c < boardAliases[i].length; c++) {
+        let boardAlias = boardAliases[i];
+        if (boardAlias.indexOf(i) >= 0) {
+          for (let ci = 0; ci < boardAlias.length; ci++) {
+            if (maxScoreIndices.indexOf(boardAlias[ci])) {
+              maxMatched = boardAlias[ci];
               break;
             }
-            if (garbageIndices.indexOf(boardChirality[ci])) {
-              garbageMatched = boardChirality[ci];
+            if (garbageIndices.indexOf(boardAlias[ci])) {
+              garbageMatched = boardAlias[ci];
               break;
             }
           }
@@ -272,59 +432,66 @@ function playAI() {
     let x = maxScoreIndex % 3;
     let y = Math.floor(maxScoreIndex / 3) % 3;
     playAt(boardIndex, x, y);
+    if (gCursorX >= 0 && gCursorY >= 0) {
+      gCursorX = x + boardIndex * 3;
+      gCursorY = y;
+    }
   }
 
+  if (gPlaying > 0) {
+    gMessage = "";
+  }
   drawCanvas();
   return true;
 }
 
-function checkChiralities(boardsCount, board) {
-  let boardChiralities = new Array(board.length);
+function checkAliases(boardsCount, board) {
+  let boardAliases = new Array(board.length);
   for (let i = 0; i < board.length; i++) {
-    boardChiralities[i] = new Array();
+    boardAliases[i] = new Array();
   }
 
   for (let i = 0; i < boardsCount; i++) {
     if ((board[i * 9 + 0] > 0) == (board[i * 9 + 2] > 0)
           && (board[i * 9 + 3] > 0) == (board[i * 9 + 5] > 0)
           && (board[i * 9 + 6] > 0) == (board[i * 9 + 8] > 0)) {
-      boardChiralities[i * 9 + 2].push(i * 9 + 0);
-      boardChiralities[i * 9 + 5].push(i * 9 + 3);
-      boardChiralities[i * 9 + 8].push(i * 9 + 6);
+      boardAliases[i * 9 + 2].push(i * 9 + 0);
+      boardAliases[i * 9 + 5].push(i * 9 + 3);
+      boardAliases[i * 9 + 8].push(i * 9 + 6);
     }
 
     if ((board[i * 9 + 0] > 0) == (board[i * 9 + 6] > 0)
           && (board[i * 9 + 1] > 0) == (board[i * 9 + 7] > 0)
           && (board[i * 9 + 2] > 0) == (board[i * 9 + 8] > 0)) {
-      boardChiralities[i * 9 + 6].push(i * 9 + 0);
-      boardChiralities[i * 9 + 7].push(i * 9 + 1);
-      boardChiralities[i * 9 + 8].push(i * 9 + 2);
+      boardAliases[i * 9 + 6].push(i * 9 + 0);
+      boardAliases[i * 9 + 7].push(i * 9 + 1);
+      boardAliases[i * 9 + 8].push(i * 9 + 2);
     }
 
     if ((board[i * 9 + 1] > 0) == (board[i * 9 + 3] > 0)
           && (board[i * 9 + 2] > 0) == (board[i * 9 + 6] > 0)
           && (board[i * 9 + 5] > 0) == (board[i * 9 + 7] > 0)) {
-      boardChiralities[i * 9 + 3].push(i * 9 + 1);
-      boardChiralities[i * 9 + 6].push(i * 9 + 2);
-      boardChiralities[i * 9 + 7].push(i * 9 + 5);
+      boardAliases[i * 9 + 3].push(i * 9 + 1);
+      boardAliases[i * 9 + 6].push(i * 9 + 2);
+      boardAliases[i * 9 + 7].push(i * 9 + 5);
     }
 
     if ((board[i * 9 + 0] > 0) == (board[i * 9 + 8] > 0)
           && (board[i * 9 + 1] > 0) == (board[i * 9 + 5] > 0)
           && (board[i * 9 + 3] > 0) == (board[i * 9 + 7] > 0)) {
-      boardChiralities[i * 9 + 8].push(i * 9 + 0);
-      boardChiralities[i * 9 + 5].push(i * 9 + 1);
-      boardChiralities[i * 9 + 7].push(i * 9 + 3);
+      boardAliases[i * 9 + 8].push(i * 9 + 0);
+      boardAliases[i * 9 + 5].push(i * 9 + 1);
+      boardAliases[i * 9 + 7].push(i * 9 + 3);
     }
 
     if ((board[i * 9 + 0] > 0) == (board[i * 9 + 8] > 0)
           && (board[i * 9 + 1] > 0) == (board[i * 9 + 7] > 0)
           && (board[i * 9 + 2] > 0) == (board[i * 9 + 6] > 0)
           && (board[i * 9 + 3] > 0) == (board[i * 9 + 5] > 0)) {
-      boardChiralities[i * 9 + 8].push(i * 9 + 0);
-      boardChiralities[i * 9 + 7].push(i * 9 + 1);
-      boardChiralities[i * 9 + 6].push(i * 9 + 2);
-      boardChiralities[i * 9 + 5].push(i * 9 + 3);
+      boardAliases[i * 9 + 8].push(i * 9 + 0);
+      boardAliases[i * 9 + 7].push(i * 9 + 1);
+      boardAliases[i * 9 + 6].push(i * 9 + 2);
+      boardAliases[i * 9 + 5].push(i * 9 + 3);
     }
   }
 
@@ -339,34 +506,37 @@ function checkChiralities(boardsCount, board) {
       }
       if (same) {
         for (let k = 0; k < 9; k++) {
-          boardChiralities[i * 9 + k].push(j * 9 + k);
+          boardAliases[i * 9 + k].push(j * 9 + k);
         }
       }
     }
   }
 
-  return boardChiralities;
+  return boardAliases;
 }
 
 function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus, depth = 1) {
+  let result = 0;
   if (!isPlayable(boardIndex, x, y, boardsCount, board, boardsStatus)) {
     return undefined;
   }
   board[boardIndex * 9 + y * 3 + x] = playing;
+  if (gBoardsScoreCache[getBinaryIndex(board)] = undefined) {
+    return gBoardsScoreCache[getBinaryIndex(board)];
+  }
   checkBoard(boardsCount, board, boardsStatus);
   let playable = isPlayableToAnywhere(boardsCount, board, boardsStatus);
   if (playable == false) {
-    return -100;
+    result = -100;
+  } else if (depth <= 0) {
+    result = 0;
   } else {
-    if (depth <= 0) {
-      return 0;
-    }
     let minScore = undefined;
     let maxScore = undefined;
-    let boardChiralities = checkChiralities(boardsCount, board);
-    // console.dir(boardChiralities);
+    let boardAliases = checkAliases(boardsCount, board);
+    // console.dir(boardAliases);
     for (let j = 0; j < board.length; j++) {
-      if (boardChiralities[j] && boardChiralities[j].length > 0) {
+      if (boardAliases[j] && boardAliases[j].length > 0) {
         continue;
       }
       let tmpBoard2 = board.concat();
@@ -385,28 +555,28 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
         break;
       }
     }
-    return maxScore / (-2);
+    result = maxScore / (-2);
   }
-  return 0;
+  gBoardsScoreCache[getBinaryIndex(board)] = result;
+  return result;
 }
 
 function playAt(boardIndex, x, y) {
   if (isPlayable(boardIndex, x, y)) {
     gBoard[boardIndex * 9 + y * 3 + x] = gPlaying;
     gMoves.push(boardIndex * 9 + y * 3 + x);
-    checkBoard(gBoardsCount, gBoard, gBoardStatus);
+    checkBoard(gBoardsCount, gBoard, gBoardsStatus);
     drawCanvas();
     let playable = isPlayableToAnywhere();
     if (playable) {
       gPlaying = 3 - gPlaying;
       if (gPlaying == gAI) {
-        playAI();
-        if (gHintMode) {
-          updateScore();
-        }
+        playAIAsync();
       }
     } else {
       gPlaying = gPlaying - 3;
+      gCursorX = -1;
+      gCursorY = -1;
       if (gPlaying == -1) {
         gMessage = "First player" + (gAI == 1 ? " (AI) " : " ") + "wins!";
       } else if (gPlaying == -2) {
@@ -416,7 +586,7 @@ function playAt(boardIndex, x, y) {
   }
 }
 
-function isPlayableToAnywhere(boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardStatus) {
+function isPlayableToAnywhere(boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardsStatus) {
   let playable = false;
   for (let i = 0; i < boardsCount; i++) {
     for (let y = 0; y < 3; y++) {
@@ -430,14 +600,14 @@ function isPlayableToAnywhere(boardsCount = gBoardsCount, board = gBoard, boards
   return false;
 }
 
-function isPlayable(boardIndex, x, y, boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardStatus) {
+function isPlayable(boardIndex, x, y, boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardsStatus) {
   if (board[boardIndex * 9 + y * 3 + x] <= 0 && boardsStatus[boardIndex * 9 + y * 3 + x] == 0) {
     return true;
   }
   return false;
 }
 
-function checkBoard(boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardStatus) {
+function checkBoard(boardsCount = gBoardsCount, board = gBoard, boardsStatus = gBoardsStatus) {
   for (let i = 0; i < gBoardsCount; i++) {
     let playable = true;
     for (let y = 0; y < 3; y++) {
@@ -523,60 +693,42 @@ function windowResized() {
   drawCanvas();
 }
 
-function getRectOfBoardSquare(boardIndex, x, y, boardsCount, width, height) {
-  let unit, xMax, yMax, xBoardOffset, yBoardOffset, xOrigin, yOrigin;
+function getBoardUnits(boardsCount, width, height) {
+  let xMax, yMax, xOrigin, yOrigin, unit;
 
   if (boardsCount == 1) {
     xMax = 5;
     yMax = 5;
-    xBoardOffset = 0;
-    yBoardOffset = 0;
   } else if (boardsCount == 2) {
     if (width > height) {
       xMax = 9;
       yMax = 5;
-      xBoardOffset = boardIndex % 2 * 4;
-      yBoardOffset = 0;
     } else {
       xMax = 5;
       yMax = 9;
-      xBoardOffset = 0;
-      yBoardOffset = boardIndex % 2 * 4;
     }
   } else if (boardsCount == 3) {
     if (width >= height * 2.5) {
       xMax = 13;
       yMax = 5;
-      xBoardOffset = boardIndex % 3 * 4;
-      yBoardOffset = 0;
     } else if (width * 2.5 <= height) {
       xMax = 5;
       yMax = 13;
-      xBoardOffset = 0;
-      yBoardOffset = boardIndex * 4;
     } else {
       xMax = 9;
       yMax = 9;
-      xBoardOffset = boardIndex % 2 * 4;
-      yBoardOffset = Math.floor(boardIndex / 2) * 4;
     }
   } else if (boardsCount == 5) {
     if (width > height) {
       xMax = 13;
       yMax = 9;
-      xBoardOffset = boardIndex % 3 * 4;
-      yBoardOffset = Math.floor(boardIndex / 3) * 4;
     } else {
       xMax = 9;
       yMax = 13;
-      xBoardOffset = boardIndex % 2 * 4;
-      yBoardOffset = Math.floor(boardIndex / 2) * 4;
     }
   } else {
     xMax = 9;
     yMax = 9;
-    xBoardOffset = boardIndex % 2 * 4;
-    yBoardOffset = Math.floor(boardIndex / 2) * 4;
   }
 
   if (width / xMax > height / yMax) {
@@ -588,6 +740,29 @@ function getRectOfBoardSquare(boardIndex, x, y, boardsCount, width, height) {
     xOrigin = 0;
     yOrigin = (height / 2) - (width / xMax * (yMax / 2));
   }
+
+  return {
+    xMax: xMax,
+    yMax, yMax,
+    xOrigin: xOrigin,
+    yOrigin: yOrigin,
+    unit: unit
+  };
+}
+
+function getRectOfBoardSquare(boardIndex, x, y, boardsCount, width, height) {
+  let unit, xMax, yMax, xBoardOffset, yBoardOffset, xOrigin, yOrigin;
+
+  let units = getBoardUnits(boardsCount, width, height);
+  xMax = units.xMax;
+  yMax = units.yMax;
+  xOrigin = units.xOrigin;
+  yOrigin = units.yOrigin;
+  unit = units.unit;
+
+  let xMaxM1P4 = Math.floor((xMax - 1) / 4);
+  xBoardOffset = (Math.floor(boardIndex) % xMaxM1P4) * 4;
+  yBoardOffset = (Math.floor(boardIndex / xMaxM1P4)) * 4;
 
   return [
     (x + 1 + xBoardOffset) * unit + xOrigin,
@@ -605,4 +780,13 @@ function rectContainsPoint(rect, point) {
       && point[0] < rect[0] + rect[2] 
       && point[1] < rect[1] + rect[3]
   );
+}
+
+function shrinkRect(rect, delta) {
+  return [
+    rect[0] + delta,
+    rect[1] + delta,
+    rect[2] - 2 * delta,
+    rect[3] - 2 * delta
+  ];
 }
