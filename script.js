@@ -12,6 +12,9 @@ let gBoardsScoreCache = {};
 let gCursorX = -1;
 let gCursorY = -1;
 let gAIPlaying = false;
+let gSettingTouchCount = 0;
+let gSettingLastTouchTime = -1;
+let gHintDepth = 4;
 
 onload = _ => {
   initialize();
@@ -23,11 +26,22 @@ onload = _ => {
 function initialize() {
   window.addEventListener('resize', windowResized);
   document.getElementById('canvas').addEventListener('mousedown', canvasClicked);
-  // document.getElementById('undo').addEventListener('click', undoClicked);
-  document.getElementById('reset').addEventListener('click', resetClicked);
+  document.getElementById('undo').addEventListener('click', undoClicked);
+  document.getElementById('button_reset').addEventListener('click', resetClicked);
+  document.getElementById('button_cheat_mode').addEventListener('click', cheatModeClicked);
   document.getElementById('ai').addEventListener('change', aiChanged);
   document.getElementById('boards_count').addEventListener('change', boardsCountChanged);
+  document.getElementById('settings').addEventListener('mousedown', mouseDownOnSettings);
+  document.getElementById('settings').addEventListener('touchstart', mouseDownOnSettings);
+  document.getElementById('cheat_depth').addEventListener('input', hintDepthChanged);
+  document.getElementById('cheat_depth').addEventListener('change', hintDepthChanged);
   document.addEventListener('keydown', keyPressed);
+}
+
+function hintDepthChanged(event) {
+  gHintDepth = event.target.value;
+  updateScore();
+  drawCanvas();
 }
 
 function initBoard() {
@@ -122,6 +136,10 @@ function keyPressed() {
   }
   if (keyCode == 53 || keyCode == 101 || keyCode == 71 || keyCode == 13) { // 5、G、Enter
     playAt(Math.floor(gCursorX / 3), gCursorX % 3, gCursorY);
+    if (gHintMode) {
+      drawCanvas();
+      updateScore();
+    }
     document.getElementById('settings').className = 'settings hidden';
     drawCanvas();
     return;
@@ -134,6 +152,18 @@ function keyPressed() {
     }
     return;
   }
+  if (keyCode == 57 || keyCode == 105 || keyCode == 78) { // 9、N
+    if (gHintMode) {
+      gHintMode = false;
+      drawCanvas();
+      return;
+    } else {
+      gHintMode = true;
+      updateScore();
+      drawCanvas();
+      return;
+    }
+  }
 }
 
 function undoClicked() {
@@ -143,7 +173,7 @@ function undoClicked() {
     let x = originalMoves[i] % 3;
     let y = Math.floor((originalMoves[i] % 9) / 3);
     let boardIndex = Math.floor(originalMoves[i] / 9);
-    playAt(boardIndex, x, y);
+    playAt(boardIndex, x, y, true);
   }
   drawCanvas();
 }
@@ -154,6 +184,47 @@ function resetClicked() {
   drawCanvas();
   if (gPlaying == gAI) {
     playAIAsync();
+  }
+}
+
+function preventMouseDownOnSettings() {
+  gSettingTouchCount = 0;
+  gSettingLastTouchTime = Date.now();
+}
+
+function mouseDownOnSettings(event) {
+  if (event.target.id != 'settings') {
+    gSettingTouchCount = 0;
+    return;
+  }
+
+  let touchInterval = Date.now() - gSettingLastTouchTime;
+  if (touchInterval < 500) {
+    gSettingTouchCount++;
+    if (gSettingTouchCount >= 3) {
+      if (document.getElementById('cheat_mode').className.indexOf('gone') >= 0) {
+        document.getElementById('cheat_mode').className = '';
+      } else {
+        document.getElementById('cheat_mode').className = 'gone';
+      }
+      gSettingTouchCount = 0;
+    }
+  } else {
+    gSettingTouchCount = 1;
+  }
+  gSettingLastTouchTime = Date.now();
+}
+
+function cheatModeClicked() {
+ if (gHintMode) {
+    gHintMode = false;
+    drawCanvas();
+    return;
+  } else {
+    gHintMode = true;
+    updateScore();
+    drawCanvas();
+    return;
   }
 }
 
@@ -229,6 +300,9 @@ function drawCanvas() {
         }
         if (gBoard[i * 9 + y * 3 + x] == -1) {
           ctx.fillStyle = "#CCCCCC";
+          if (gHintMode) {
+            ctx.fillStyle = "#BBBBBB";
+          }
           ctx.beginPath();
           ctx.ellipse(rect[0] + rect[2] / 2, rect[1] + rect[3] / 2, unit / 16, unit/16 , 0, 0, Math.PI * 2);
           ctx.fill();
@@ -236,10 +310,26 @@ function drawCanvas() {
         if (gHintMode == true && gBoardsScore != undefined) {
           let score = gBoardsScore[i * 9 + y * 3 + x];
           if (score != undefined) {
-            ctx.fillStyle = "#A8A8A8";
-            ctx.font = "" + (unit * 2 / 7) + "px sans-serif";
+            if (gPlaying == 1) {
+              if (score > 0) {
+                ctx.fillStyle = "#FFA8A8";
+              } else if (score < 0) {
+                ctx.fillStyle = "#A8A8FF";
+              } else {
+                ctx.fillStyle = "#A8A8A8";
+              }
+            } else {
+              if (score > 0) {
+                ctx.fillStyle = "#A8A8FF";
+              } else if (score < 0) {
+                ctx.fillStyle = "#FFA8A8";
+              } else {
+                ctx.fillStyle = "#A8A8A8";
+              }
+            }
+            ctx.font = "" + (unit * 3 / 14) + "px sans-serif";
             ctx.textAlign = "center";
-            ctx.fillText(score, rect[0] + rect[2] / 2, rect[1] + rect[3] * 8 / 13);
+            ctx.fillText(score, rect[0] + rect[2] / 2, rect[1] + rect[3] * 15 / 17);
           }
         }
       }
@@ -299,6 +389,10 @@ function canvasClicked() {
         let rect = getRectOfBoardSquare(i, x, y, gBoardsCount, width, height);
         if (rectContainsPoint(rect, point)) {
           playAt(i, x, y);
+          if (gHintMode) {
+            drawCanvas();
+            updateScore();
+          }
         }
       }
     }
@@ -327,7 +421,7 @@ function updateScore() {
       }
     }
     if (gBoardsScore[i] == undefined) {
-      let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 4);
+      let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, gHintDepth);
       gBoardsScore[boardIndex * 9 + y * 3 + x] = score;
     }
   }
@@ -347,7 +441,7 @@ function getBinaryIndex(board) {
 
 function playAIAsync() {
   gAIPlaying = true;
-  gMessage = "AI is thinking...";
+  gMessage = "COM is thinking...";
   drawCanvas();
   requestAnimationFrame(_ => {
     setTimeout(_ => {
@@ -357,7 +451,7 @@ function playAIAsync() {
       }
       drawCanvas();
       gAIPlaying = false;
-    }, 0);
+    }, 1);
   });
 }
 
@@ -365,7 +459,7 @@ function playAI() {
   if (isPlayableToAnywhere() == false) {
     return false;
   }
-  gMessage = "AI is thinking...";
+  gMessage = "COM is thinking...";
   drawCanvas();
 
   let maxScore = undefined;
@@ -561,7 +655,7 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
   return result;
 }
 
-function playAt(boardIndex, x, y) {
+function playAt(boardIndex, x, y, disableAI) {
   if (isPlayable(boardIndex, x, y)) {
     gBoard[boardIndex * 9 + y * 3 + x] = gPlaying;
     gMoves.push(boardIndex * 9 + y * 3 + x);
@@ -570,7 +664,7 @@ function playAt(boardIndex, x, y) {
     let playable = isPlayableToAnywhere();
     if (playable) {
       gPlaying = 3 - gPlaying;
-      if (gPlaying == gAI) {
+      if (gPlaying == gAI && disableAI != true) {
         playAIAsync();
       }
     } else {
@@ -578,9 +672,9 @@ function playAt(boardIndex, x, y) {
       gCursorX = -1;
       gCursorY = -1;
       if (gPlaying == -1) {
-        gMessage = "First player" + (gAI == 1 ? " (AI) " : " ") + "wins!";
+        gMessage = "First player" + (gAI == 1 ? " (COM) " : " ") + "wins!";
       } else if (gPlaying == -2) {
-        gMessage = "Second player" + (gAI == 2 ? " (AI) " : " ") + "wins!";
+        gMessage = "Second player" + (gAI == 2 ? " (COM) " : " ") + "wins!";
       }
     }
   }
@@ -790,3 +884,82 @@ function shrinkRect(rect, delta) {
     rect[3] - 2 * delta
   ];
 }
+
+function boardToCircularIndices(board, startIndex = 0) {
+  let result = [];
+  const conversionTable = [4, 0, 1, 2, 5, 8, 7, 6, 3];
+  for (let i = 0; i < 9; i++) {
+    result.push(board[conversionTable[i + startIndex]]);
+  }
+  return result;
+}
+
+function boardFromCircularIndices(board, startIndex = 0) {
+  let result = [];
+  const conversionTable = [1, 2, 3, 8, 0, 4, 7, 6, 5];
+  for (let i = 0; i < 9; i++) {
+    result.push(board[conversionTable[i + startIndex]]);
+  }
+  return result;
+}
+
+function rotateBoard(board, startIndex = 0) {
+  let result = [];
+  const conversionTable = [2, 5, 8, 1, 4, 7, 0, 3, 6];
+  for (let i = 0; i < 9; i++) {
+    result.push(board[conversionTable[i + startIndex]]);
+  }
+  return result;
+}
+
+function flipBoard(board, startIndex = 0) {
+  let result = [];
+  const conversionTable = [2, 1, 0, 5, 4, 3, 8, 7, 6];
+  for (let i = 0; i < 9; i++) {
+    result.push(board[conversionTable[i + startIndex]]);
+  }
+  return result;
+}
+
+function toNumeric(board, startIndex = 0) {
+  let result = 0;
+  for (let i = 0; i < 9; i++) {
+    result += (parseInt(board[i]) > 0 ? 1 : 0) * (1 << i);
+  }
+  return result;
+}
+
+function contractBoard(board, startIndex = 0) {
+  let original = board;
+  let originalIndex = toNumeric(original);
+  console.log("originalIndex = " + originalIndex);
+
+  let rotate1 = rotateBoard(board);
+  let rotate1Index = toNumeric(rotate1);
+  console.log("rotate1Index = " + rotate1Index);
+
+  let rotate2 = rotateBoard(rotate1);
+  let rotate2Index = toNumeric(rotate2);
+  console.log("rotate2Index = " + rotate2Index);
+
+  let rotate3 = rotateBoard(rotate2);
+  let rotate3Index = toNumeric(rotate3);
+  console.log("rotate3Index = " + rotate3Index);
+
+  let flip = flipBoard(board);
+  let flipIndex = toNumeric(flip);
+  console.log("flipIndex = " + flipIndex);
+
+  let flipRotate1 = rotateBoard(flip);
+  let flipRotate1Index = toNumeric(flipRotate1);
+  console.log("flipRotate1Index = " + flipRotate1Index);
+
+  let flipRotate2 = rotateBoard(flipRotate1);
+  let flipRotate2Index = toNumeric(flipRotate2);
+  console.log("flipRotate2Index = " + flipRotate2Index);
+
+  let flipRotate3 = rotateBoard(flipRotate2);
+  let flipRotate3Index = toNumeric(flipRotate3);
+  console.log("flipRotate3Index = " + flipRotate3Index);
+}
+

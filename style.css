@@ -33,7 +33,6 @@ div#settings {
 	text-align: center;
 	font-size: 14px;
 	background: #00000022;
-	font-weight: bold;
 	line-height: 40px;
 }
 
@@ -54,4 +53,12 @@ div#settings button:active {
 
 .hidden {
 	visibility: hidden !important;
+}
+
+.gone {
+	display: none !important;
+}
+
+div#settings button.darken {
+	background: #bbbe;
 }

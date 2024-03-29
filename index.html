@@ -14,8 +14,8 @@
       <div class="settings" id="settings">
         <select id="ai">
           <option selected="selected" value="0">Human vs Human</option>
-          <option value="2">Human vs AI</option>
-          <option value="1">AI vs Human</option>
+          <option value="2">Human vs COM</option>
+          <option value="1">COM vs Human</option>
         </select>
         &nbsp;
         <select id="boards_count">
@@ -26,9 +26,16 @@
           <option value="5">5 Boards</option>
         </select>
         &nbsp;
-  <!--       <button id="undo">Undo</button>
-        &nbsp; -->
-        <button id="reset">Reset</button>
+        <button id="button_reset">Reset</button>
+        <span id="cheat_mode" class="gone">
+          &nbsp;
+          <button id="button_cheat_mode" class="darken">Cheat Mode</button>
+          &nbsp;
+          <span id="cheat_depth_label">Depth:</span>
+          <input id="cheat_depth" type="number" value="4" min="3" max="8" />
+          &nbsp;
+          <button id="undo" class="darken">Undo</button>
+        </span>
       </div>
     </div>
   </body>
