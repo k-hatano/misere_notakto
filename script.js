@@ -15,6 +15,7 @@ let gAIPlaying = false;
 let gSettingTouchCount = 0;
 let gSettingLastTouchTime = -1;
 let gHintDepth = 4;
+let gResetting = false;
 
 onload = _ => {
   initialize();
@@ -60,10 +61,13 @@ function initBoard() {
   gCursorX = -1;
   gCursorY = -1;
   gAIPlaying = false;
+  gResetting = false;
 }
 
 function keyPressed() {
   var keyCode = event.keyCode;
+  var originalResetting = gResetting;
+  gResetting = false;
   if (keyCode == 38 || keyCode == 67 || keyCode == 56 || keyCode == 104 || keyCode == 228) { // 上、C、8、ゲームパッド90
     if (gPlaying <= 0) {
       gCursorX = -1;
@@ -152,7 +156,18 @@ function keyPressed() {
     }
     return;
   }
-  if (keyCode == 57 || keyCode == 105 || keyCode == 78) { // 9、N
+  // if (keyCode == 49 || keyCode == 97 || keyCode == 78) { // 1、N
+  //   if (originalResetting == false){
+  //     gResetting = true;
+  //     gMessage = "If you want to reset, press 1 or N key one more time.";
+  //   } else {
+  //     gResetting = false; 
+  //     resetClicked();
+  //   }
+  //   drawCanvas();
+  //   return;
+  // }
+  if (keyCode == 57 || keyCode == 105 || keyCode == 75) { // 9、K
     if (gHintMode) {
       gHintMode = false;
       drawCanvas();
@@ -402,6 +417,7 @@ function canvasClicked() {
 
 function updateScore() {
   let boardAliases = checkAliases(gBoardsCount, gBoard);
+  gBoardsScoreCache = {};
   for (let i = 0; i < gBoard.length; i++) {
     gBoardsScore[i] = undefined;
   }
@@ -425,18 +441,6 @@ function updateScore() {
       gBoardsScore[boardIndex * 9 + y * 3 + x] = score;
     }
   }
-}
-
-function getBinaryIndex(board) {
-  let result = 0;
-  let digit = 1;
-  for (let i = 0; i < board.length; i++) {
-    if (board[i] > 0) {
-      result += digit;
-    }
-    digit *= 2;
-  }
-  return result;
 }
 
 function playAIAsync() {
@@ -615,7 +619,7 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
     return undefined;
   }
   board[boardIndex * 9 + y * 3 + x] = playing;
-  if (gBoardsScoreCache[getBinaryIndex(board)] = undefined) {
+  if (gBoardsScoreCache[getBinaryIndex(board)] != undefined) {
     return gBoardsScoreCache[getBinaryIndex(board)];
   }
   checkBoard(boardsCount, board, boardsStatus);
@@ -885,38 +889,71 @@ function shrinkRect(rect, delta) {
   ];
 }
 
+function getBinaryIndex(board) {
+  // let result = 0;
+  // let digit = 1;
+  // for (let i = 0; i < board.length; i++) {
+  //   if (board[i] > 0) {
+  //     result += digit;
+  //   }
+  //   digit *= 2;
+  // }
+  // return result;
+  let result = boardsToBinaryIndices(board, gBoardsCount);
+  return result;
+}
+
+function boardsToBinaryIndices(boards, boardsCount) {
+  let indicesPerBoard = new Array(boardsCount);
+  for (let i = 0; i < boardsCount; i++) {
+    let board = boards.slice(i * 9, i * 9 + 9);
+    let index = contractBoard(board);
+    indicesPerBoard[i] = index;
+  }
+  // indicesPerBoard = indicesPerBoard.sort((a, b) => (b - a));
+  let result = 0;
+  let rate = 1;
+  for (let i = 0; i < indicesPerBoard.length; i++) {
+    result += parseInt(indicesPerBoard[i]) * rate;
+    rate *= 9;
+  }
+  console.dir(indicesPerBoard);
+  console.log("result = " + result);
+  return result;
+}
+
 function boardToCircularIndices(board, startIndex = 0) {
-  let result = [];
+  let result = new Array(9);
   const conversionTable = [4, 0, 1, 2, 5, 8, 7, 6, 3];
   for (let i = 0; i < 9; i++) {
-    result.push(board[conversionTable[i + startIndex]]);
+    result[i] = board[conversionTable[i + startIndex]];
   }
   return result;
 }
 
 function boardFromCircularIndices(board, startIndex = 0) {
-  let result = [];
+  let result = new Array(9);
   const conversionTable = [1, 2, 3, 8, 0, 4, 7, 6, 5];
   for (let i = 0; i < 9; i++) {
-    result.push(board[conversionTable[i + startIndex]]);
+    result[i] = board[conversionTable[i + startIndex]];
   }
   return result;
 }
 
 function rotateBoard(board, startIndex = 0) {
-  let result = [];
+  let result = new Array(9);
   const conversionTable = [2, 5, 8, 1, 4, 7, 0, 3, 6];
   for (let i = 0; i < 9; i++) {
-    result.push(board[conversionTable[i + startIndex]]);
+    result[i] = board[conversionTable[i + startIndex]];
   }
   return result;
 }
 
 function flipBoard(board, startIndex = 0) {
-  let result = [];
+  let result = new Array(9)
   const conversionTable = [2, 1, 0, 5, 4, 3, 8, 7, 6];
   for (let i = 0; i < 9; i++) {
-    result.push(board[conversionTable[i + startIndex]]);
+    result[i] = board[conversionTable[i + startIndex]];
   }
   return result;
 }
@@ -924,7 +961,7 @@ function flipBoard(board, startIndex = 0) {
 function toNumeric(board, startIndex = 0) {
   let result = 0;
   for (let i = 0; i < 9; i++) {
-    result += (parseInt(board[i]) > 0 ? 1 : 0) * (1 << i);
+    result += (parseInt(board[i + startIndex]) > 0 ? 1 : 0) * (1 << i);
   }
   return result;
 }
@@ -961,5 +998,8 @@ function contractBoard(board, startIndex = 0) {
   let flipRotate3 = rotateBoard(flipRotate2);
   let flipRotate3Index = toNumeric(flipRotate3);
   console.log("flipRotate3Index = " + flipRotate3Index);
+
+  return Math.min(originalIndex, rotate1Index, rotate2Index, rotate3Index,
+    flipIndex, flipRotate1Index, flipRotate2Index, flipRotate3Index);
 }
 
