@@ -16,6 +16,8 @@ let gSettingTouchCount = 0;
 let gSettingLastTouchTime = -1;
 let gHintDepth = 4;
 let gResetting = false;
+let gUseCache = true;
+let gStrokes = new Array(0);
 
 onload = _ => {
   initialize();
@@ -45,6 +47,12 @@ function hintDepthChanged(event) {
   drawCanvas();
 }
 
+function useCacheChanged(event) {
+  gUseCache = event.target.checked;
+  updateScore();
+  drawCanvas();
+}
+
 function initBoard() {
   gPlaying = 1;
   gBoard = new Array(gBoardsCount * 9);
@@ -54,6 +62,10 @@ function initBoard() {
     gBoard[i] = 0;
     gBoardsStatus[i] = 0;
     gBoardsScore[i] = 0;
+  }
+  gStrokes = new Array(gBoardsCount);
+  for (let i = 0; i < gStrokes.length; i++) {
+    gStrokes[i] = 0;
   }
   gMoves = new Array(0);
   gBoardsScoreCache = {}
@@ -195,7 +207,7 @@ function undoClicked() {
 
 function resetClicked() {
   initBoard();
-  gHintMode = event.altKey;
+  gHintMode = gHintMode || event.altKey;
   drawCanvas();
   if (gPlaying == gAI) {
     playAIAsync();
@@ -347,6 +359,65 @@ function drawCanvas() {
             ctx.fillText(score, rect[0] + rect[2] / 2, rect[1] + rect[3] * 15 / 17);
           }
         }
+      }
+    }
+
+    if (gStrokes[i] > 0) {
+      let rect = getRectOfBoardSquare(i, 0, 0, gBoardsCount, width, height);
+      ctx.lineWidth = unit / 24;
+      if (gStrokes[i] & 1) {
+        ctx.strokeStyle = "#C00000";
+      }
+      if (gStrokes[i] & 2) {
+        ctx.strokeStyle = "#0000C0";
+      }
+      if (gStrokes[i] & 4) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0] + unit / 2, rect[1]);
+        ctx.lineTo(rect[0] + unit / 2, rect[1] + unit * 3);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 8) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0] + unit * 3 / 2, rect[1]);
+        ctx.lineTo(rect[0] + unit * 3 / 2, rect[1] + unit * 3);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 16) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0] + unit * 5 / 2, rect[1]);
+        ctx.lineTo(rect[0] + unit * 5 / 2, rect[1] + unit * 3);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 32) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0] + unit * 3, rect[1]);
+        ctx.lineTo(rect[0], rect[1] + unit * 3);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 64) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0], rect[1] + unit / 2);
+        ctx.lineTo(rect[0] + unit * 3, rect[1] + unit / 2);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 128) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0], rect[1] + unit * 3 / 2);
+        ctx.lineTo(rect[0] + unit * 3, rect[1] + unit * 3 / 2);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 256) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0], rect[1] + unit * 5 / 2);
+        ctx.lineTo(rect[0] + unit * 3, rect[1] + unit * 5 / 2);
+        ctx.stroke();
+      }
+      if (gStrokes[i] & 512) {
+        ctx.beginPath();
+        ctx.moveTo(rect[0], rect[1]);
+        ctx.lineTo(rect[0] + unit * 3, rect[1] + unit * 3);
+        ctx.stroke();
       }
     }
   }
@@ -506,7 +577,7 @@ function playAI() {
         continue;
       }
     }
-    let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 3);
+    let score = valuateMove(boardIndex, x, y, gPlaying, gBoardsCount, tmpBoard, tmpBoardStatus, 4);
     // console.log("i=" + i + " score=" + score);
     if (maxScore == undefined) {
       maxScore = score;
@@ -618,12 +689,15 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
   if (!isPlayable(boardIndex, x, y, boardsCount, board, boardsStatus)) {
     return undefined;
   }
-  board[boardIndex * 9 + y * 3 + x] = playing;
-  if (gBoardsScoreCache[getBinaryIndex(board)] != undefined) {
-    return gBoardsScoreCache[getBinaryIndex(board)];
+  let tmpBoard = board.concat();
+  let tmpBoardsStatus = boardsStatus.concat();
+  tmpBoard[boardIndex * 9 + y * 3 + x] = playing;
+  let binaryIndex = getBinaryIndex(tmpBoard);
+  if (gUseCache && (gBoardsScoreCache[binaryIndex] != undefined)) {
+    return gBoardsScoreCache[binaryIndex];
   }
-  checkBoard(boardsCount, board, boardsStatus);
-  let playable = isPlayableToAnywhere(boardsCount, board, boardsStatus);
+  checkBoard(boardsCount, tmpBoard, tmpBoardsStatus);
+  let playable = isPlayableToAnywhere(boardsCount, tmpBoard, tmpBoardsStatus);
   if (playable == false) {
     result = -100;
   } else if (depth <= 0) {
@@ -631,14 +705,14 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
   } else {
     let minScore = undefined;
     let maxScore = undefined;
-    let boardAliases = checkAliases(boardsCount, board);
+    let boardAliases = checkAliases(boardsCount, tmpBoard);
     // console.dir(boardAliases);
     for (let j = 0; j < board.length; j++) {
       if (boardAliases[j] && boardAliases[j].length > 0) {
         continue;
       }
-      let tmpBoard2 = board.concat();
-      let tmpBoardsStatus2 = boardsStatus.concat();
+      let tmpBoard2 = tmpBoard.concat();
+      let tmpBoardsStatus2 = tmpBoardsStatus.concat();
       let boardIndex2 = Math.floor(j / 9);
       let x2 = j % 3;
       let y2 = Math.floor(j / 3) % 3;
@@ -655,7 +729,7 @@ function valuateMove(boardIndex, x, y, playing, boardsCount, board, boardsStatus
     }
     result = maxScore / (-2);
   }
-  gBoardsScoreCache[getBinaryIndex(board)] = result;
+  gBoardsScoreCache[binaryIndex] = result;
   return result;
 }
 
@@ -663,6 +737,7 @@ function playAt(boardIndex, x, y, disableAI) {
   if (isPlayable(boardIndex, x, y)) {
     gBoard[boardIndex * 9 + y * 3 + x] = gPlaying;
     gMoves.push(boardIndex * 9 + y * 3 + x);
+    updateStrokes();
     checkBoard(gBoardsCount, gBoard, gBoardsStatus);
     drawCanvas();
     let playable = isPlayableToAnywhere();
@@ -782,6 +857,49 @@ function checkBoard(boardsCount = gBoardsCount, board = gBoard, boardsStatus = g
   }
 }
 
+function updateStrokes() {
+  let flag = 0;
+  for (let i = 0; i < gBoardsCount; i++) {
+    if (gStrokes[i] > 0) {
+      continue;
+    }
+    flag = 0;
+    if (gBoard[i * 9 + 0] > 0 && gBoard[i * 9 + 3] > 0 && gBoard[i * 9 + 6] > 0) {
+      flag += 4;
+    }
+    if (gBoard[i * 9 + 1] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 7] > 0) {
+      flag += 8;
+    }
+    if (gBoard[i * 9 + 2] > 0 && gBoard[i * 9 + 5] > 0 && gBoard[i * 9 + 8] > 0) {
+      flag += 16;
+    }
+    if (gBoard[i * 9 + 2] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 6] > 0) {
+      flag += 32;
+    }
+    if (gBoard[i * 9 + 0] > 0 && gBoard[i * 9 + 1] > 0 && gBoard[i * 9 + 2] > 0) {
+      flag += 64;
+    }
+    if (gBoard[i * 9 + 3] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 5] > 0) {
+      flag += 128;
+    }
+    if (gBoard[i * 9 + 6] > 0 && gBoard[i * 9 + 7] > 0 && gBoard[i * 9 + 8] > 0) {
+      flag += 256;
+    }
+    if (gBoard[i * 9 + 0] > 0 && gBoard[i * 9 + 4] > 0 && gBoard[i * 9 + 8] > 0) {
+      flag += 512;
+    }
+    if (flag > 0) {
+      if (gPlaying == 1) {
+        flag += 1;
+      }
+      if (gPlaying == 2) {
+        flag += 2;
+      }
+    }
+    gStrokes[i] = flag;
+  }
+}
+
 function windowResized() {
   let canvas = document.getElementById('canvas');
   let width = canvas.clientWidth;
@@ -812,6 +930,17 @@ function getBoardUnits(boardsCount, width, height) {
     } else if (width * 2.5 <= height) {
       xMax = 5;
       yMax = 13;
+    } else {
+      xMax = 9;
+      yMax = 9;
+    }
+  } else if (boardsCount == 4) {
+    if (width >= height * 3.5) {
+      xMax = 17;
+      yMax = 5;
+    } else if (width * 3.5 <= height) {
+      xMax = 5;
+      yMax = 17;
     } else {
       xMax = 9;
       yMax = 9;
@@ -910,15 +1039,13 @@ function boardsToBinaryIndices(boards, boardsCount) {
     let index = contractBoard(board);
     indicesPerBoard[i] = index;
   }
-  // indicesPerBoard = indicesPerBoard.sort((a, b) => (b - a));
+  indicesPerBoard = indicesPerBoard.sort((a, b) => (b - a));
   let result = 0;
   let rate = 1;
   for (let i = 0; i < indicesPerBoard.length; i++) {
     result += parseInt(indicesPerBoard[i]) * rate;
-    rate *= 9;
+    rate *= 512;
   }
-  console.dir(indicesPerBoard);
-  console.log("result = " + result);
   return result;
 }
 
@@ -969,35 +1096,27 @@ function toNumeric(board, startIndex = 0) {
 function contractBoard(board, startIndex = 0) {
   let original = board;
   let originalIndex = toNumeric(original);
-  console.log("originalIndex = " + originalIndex);
 
   let rotate1 = rotateBoard(board);
   let rotate1Index = toNumeric(rotate1);
-  console.log("rotate1Index = " + rotate1Index);
 
   let rotate2 = rotateBoard(rotate1);
   let rotate2Index = toNumeric(rotate2);
-  console.log("rotate2Index = " + rotate2Index);
 
   let rotate3 = rotateBoard(rotate2);
   let rotate3Index = toNumeric(rotate3);
-  console.log("rotate3Index = " + rotate3Index);
 
   let flip = flipBoard(board);
   let flipIndex = toNumeric(flip);
-  console.log("flipIndex = " + flipIndex);
 
   let flipRotate1 = rotateBoard(flip);
   let flipRotate1Index = toNumeric(flipRotate1);
-  console.log("flipRotate1Index = " + flipRotate1Index);
 
   let flipRotate2 = rotateBoard(flipRotate1);
   let flipRotate2Index = toNumeric(flipRotate2);
-  console.log("flipRotate2Index = " + flipRotate2Index);
 
   let flipRotate3 = rotateBoard(flipRotate2);
   let flipRotate3Index = toNumeric(flipRotate3);
-  console.log("flipRotate3Index = " + flipRotate3Index);
 
   return Math.min(originalIndex, rotate1Index, rotate2Index, rotate3Index,
     flipIndex, flipRotate1Index, flipRotate2Index, flipRotate3Index);
