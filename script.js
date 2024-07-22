@@ -152,10 +152,6 @@ function keyPressed() {
   }
   if (keyCode == 53 || keyCode == 101 || keyCode == 71 || keyCode == 13) { // 5、G、Enter
     playAt(Math.floor(gCursorX / 3), gCursorX % 3, gCursorY);
-    if (gHintMode) {
-      drawCanvas();
-      updateScore();
-    }
     document.getElementById('settings').className = 'settings hidden';
     drawCanvas();
     return;
@@ -475,10 +471,6 @@ function canvasClicked() {
         let rect = getRectOfBoardSquare(i, x, y, gBoardsCount, width, height);
         if (rectContainsPoint(rect, point)) {
           playAt(i, x, y);
-          if (gHintMode) {
-            drawCanvas();
-            updateScore();
-          }
         }
       }
     }
@@ -745,8 +737,11 @@ function playAt(boardIndex, x, y, disableAI) {
       gPlaying = 3 - gPlaying;
       if (gPlaying == gAI && disableAI != true) {
         playAIAsync();
+      } else if (gHintMode && disableAI != true) {
+        updateScore();
       }
     } else {
+      updateScore();
       gPlaying = gPlaying - 3;
       gCursorX = -1;
       gCursorY = -1;
@@ -924,10 +919,10 @@ function getBoardUnits(boardsCount, width, height) {
       yMax = 9;
     }
   } else if (boardsCount == 3) {
-    if (width >= height * 2.5) {
+    if (width >= height * 2) {
       xMax = 13;
       yMax = 5;
-    } else if (width * 2.5 <= height) {
+    } else if (width * 2 <= height) {
       xMax = 5;
       yMax = 13;
     } else {
@@ -935,17 +930,17 @@ function getBoardUnits(boardsCount, width, height) {
       yMax = 9;
     }
   } else if (boardsCount == 4) {
-    if (width >= height * 3.5) {
+    if (width >= height * 3) {
       xMax = 17;
       yMax = 5;
-    } else if (width * 3.5 <= height) {
+    } else if (width * 3 <= height) {
       xMax = 5;
       yMax = 17;
     } else {
       xMax = 9;
       yMax = 9;
     }
-  } else if (boardsCount == 5) {
+  } else if (boardsCount == 5 || boardsCount == 6) {
     if (width > height) {
       xMax = 13;
       yMax = 9;
